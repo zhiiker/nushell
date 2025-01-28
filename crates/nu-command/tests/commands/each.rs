@@ -1,61 +1,36 @@
-use nu_test_support::{nu, pipeline};
+use nu_test_support::nu;
 
 #[test]
 fn each_works_separately() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
-        r#"
-        echo [1 2 3] | each { echo $it 10 | math sum } | to json
-        "#
-    ));
+    let actual = nu!("echo [1 2 3] | each { |it| echo $it 10 | math sum } | to json -r");
 
     assert_eq!(actual.out, "[11,12,13]");
 }
 
 #[test]
 fn each_group_works() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
-        r#"
-        echo [1 2 3 4 5 6] | each group 3 { $it } | to json
-        "#
-    ));
+    let actual = nu!("echo [1 2 3 4 5 6] | chunks 3 | to json --raw");
 
     assert_eq!(actual.out, "[[1,2,3],[4,5,6]]");
 }
 
 #[test]
 fn each_window() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
-        r#"
-        echo [1 2 3 4] | each window 3 { $it } | to json
-        "#
-    ));
+    let actual = nu!("echo [1 2 3 4] | window 3 | to json --raw");
 
     assert_eq!(actual.out, "[[1,2,3],[2,3,4]]");
 }
 
 #[test]
 fn each_window_stride() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
-        r#"
-        echo [1 2 3 4 5 6] | each window 3 -s 2 { echo $it } | to json
-        "#
-    ));
+    let actual = nu!("echo [1 2 3 4 5 6] | window 3 -s 2 | to json --raw");
 
     assert_eq!(actual.out, "[[1,2,3],[3,4,5]]");
 }
 
 #[test]
 fn each_no_args_in_block() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
-        r#"
-        echo [[foo bar]; [a b] [c d] [e f]] | each { to json } | nth 1 | str collect
-        "#
-    ));
+    let actual = nu!("echo [[foo bar]; [a b] [c d] [e f]] | each {|i| $i | to json -r } | get 1");
 
     assert_eq!(actual.out, r#"{"foo":"c","bar":"d"}"#);
 }
@@ -63,11 +38,28 @@ fn each_no_args_in_block() {
 #[test]
 fn each_implicit_it_in_block() {
     let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
-        r#"
-        echo [[foo bar]; [a b] [c d] [e f]] | each { nu --testbin cococo $it.foo }
-        "#
-    ));
+        "echo [[foo bar]; [a b] [c d] [e f]] | each { |it| nu --testbin cococo $it.foo } | str join"
+    );
 
     assert_eq!(actual.out, "ace");
+}
+
+#[test]
+fn each_uses_enumerate_index() {
+    let actual = nu!("[7 8 9 10] | enumerate | each {|el| $el.index } | to nuon");
+
+    assert_eq!(actual.out, "[0, 1, 2, 3]");
+}
+
+#[test]
+fn each_while_uses_enumerate_index() {
+    let actual = nu!("[7 8 9 10] | enumerate | each while {|el| $el.index } | to nuon");
+
+    assert_eq!(actual.out, "[0, 1, 2, 3]");
+}
+
+#[test]
+fn errors_in_nested_each_show() {
+    let actual = nu!("[[1,2]] | each {|x| $x | each {|y| error make {msg: \"oh noes\"} } }");
+    assert!(actual.err.contains("oh noes"))
 }

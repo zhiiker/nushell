@@ -1,4 +1,7 @@
-# nu-cli
+This crate implements the core functionality of the interactive Nushell REPL and interfaces with `reedline`.
+Currently implements the syntax highlighting and completions logic.
+Furthermore includes a few commands that are specific to `reedline`
 
-This crate provides the fundamental needs when creating the Nushell interactive REPL. In it, you'll find features for interacting with the line editor (the piece which writes the prompt and takes input from the user), keybindings, handlers for the commandline arguments passed to the REPL as it starts up, and more.
+## Internal Nushell crate
 
+This crate implements components of Nushell and is not designed to support plugin authors or other users directly.

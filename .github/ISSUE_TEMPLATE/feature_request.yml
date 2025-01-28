@@ -1,11 +1,12 @@
 name: Feature Request
 description: "When you want a new feature for something that doesn't already exist"
+labels: ["needs-triage", "enhancement"]
 body:
   - type: textarea
     id: problem
     attributes:
       label: Related problem
-      description: Is your feature request related to a problem? Please describe.
+      description: Thank you for your feature request.
       placeholder: |
         A clear and concise description of what the problem is.
         Example: I am trying to do [...] but [...]

@@ -1,40 +1,27 @@
-mod call_info;
-mod command_args;
-mod config_holder;
+#![doc = include_str!("../README.md")]
+mod call_ext;
+mod closure_eval;
+pub mod column;
+pub mod command_prelude;
+mod compile;
 pub mod documentation;
-mod env;
-pub mod evaluate;
-pub mod evaluation_context;
-mod example;
-pub mod filesystem;
-mod from_value;
-mod maybe_text_codec;
-pub mod plugin;
-mod print;
-pub mod script;
-pub mod shell;
-mod types;
-mod whole_stream_command;
+pub mod env;
+mod eval;
+mod eval_helpers;
+mod eval_ir;
+mod glob_from;
+pub mod scope;
 
-pub use crate::call_info::UnevaluatedCallInfo;
-pub use crate::command_args::{CommandArgs, RunnableContext};
-pub use crate::config_holder::ConfigHolder;
-pub use crate::documentation::{generate_docs, get_brief_help, get_documentation, get_full_help};
-pub use crate::env::host::FakeHost;
-pub use crate::env::host::Host;
-pub use crate::evaluate::block::run_block;
-pub use crate::evaluate::envvar::EnvVar;
-pub use crate::evaluate::scope::Scope;
-pub use crate::evaluate::{evaluator, evaluator::evaluate_baseline_expr};
-pub use crate::evaluation_context::EvaluationContext;
-pub use crate::example::Example;
-pub use crate::filesystem::dir_info::{DirBuilder, DirInfo, FileInfo};
-pub use crate::filesystem::filesystem_shell::FilesystemShell;
-pub use crate::from_value::FromValue;
-pub use crate::maybe_text_codec::{BufCodecReader, MaybeTextCodec, StringOrBinary};
-pub use crate::print::maybe_print_errors;
-pub use crate::shell::painter::Painter;
-pub use crate::shell::palette::{DefaultPalette, Palette};
-pub use crate::shell::shell_manager::ShellManager;
-pub use crate::shell::value_shell;
-pub use crate::whole_stream_command::{whole_stream_command, Command, WholeStreamCommand};
+pub use call_ext::CallExt;
+pub use closure_eval::*;
+pub use column::get_columns;
+pub use compile::compile;
+pub use documentation::get_full_help;
+pub use env::*;
+pub use eval::{
+    eval_block, eval_block_with_early_return, eval_call, eval_expression,
+    eval_expression_with_input, eval_subexpression, eval_variable, redirect_env,
+};
+pub use eval_helpers::*;
+pub use eval_ir::eval_ir_block;
+pub use glob_from::glob_from;

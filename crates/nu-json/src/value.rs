@@ -2,7 +2,7 @@
 use std::collections::{btree_map, BTreeMap};
 
 #[cfg(feature = "preserve_order")]
-use linked_hash_map::{self, LinkedHashMap};
+use linked_hash_map::LinkedHashMap;
 
 use std::fmt;
 use std::io;
@@ -182,7 +182,7 @@ impl Value {
 
     /// If the `Value` is an Array, returns the associated vector.
     /// Returns None otherwise.
-    pub fn as_array(&self) -> Option<&Vec<Value>> {
+    pub fn as_array(&self) -> Option<&[Value]> {
         match self {
             Value::Array(array) => Some(array),
             _ => None,
@@ -974,7 +974,7 @@ struct VariantDeserializer {
     val: Option<Value>,
 }
 
-impl<'de, 'a> de::VariantAccess<'de> for VariantDeserializer {
+impl<'de> de::VariantAccess<'de> for VariantDeserializer {
     type Error = Error;
 
     fn unit_variant(self) -> Result<()> {
@@ -1062,7 +1062,7 @@ struct MapDeserializer {
     value: Option<Value>,
 }
 
-impl<'de, 'a> de::MapAccess<'de> for MapDeserializer {
+impl<'de> de::MapAccess<'de> for MapDeserializer {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
@@ -1094,9 +1094,9 @@ impl<'de, 'a> de::MapAccess<'de> for MapDeserializer {
     }
 }
 
-pub fn to_value<T: ?Sized>(value: &T) -> Result<Value>
+pub fn to_value<T>(value: &T) -> Result<Value>
 where
-    T: ser::Serialize,
+    T: ser::Serialize + ?Sized,
 {
     value.serialize(Serializer)
 }
@@ -1141,18 +1141,18 @@ mod test {
 
         let v: Value = from_str("{\"a\":1.1}").unwrap();
         let vo = v.as_object().unwrap();
-        assert!(vo["a"].as_f64().unwrap() - 1.1 < std::f64::EPSILON);
+        assert!((vo["a"].as_f64().unwrap() - 1.1).abs() < f64::EPSILON);
 
         let v: Value = from_str("{\"a\":-1.1}").unwrap();
         let vo = v.as_object().unwrap();
-        assert!(vo["a"].as_f64().unwrap() + 1.1 > -(std::f64::EPSILON));
+        assert!((vo["a"].as_f64().unwrap() + 1.1).abs() < f64::EPSILON);
 
         let v: Value = from_str("{\"a\":1e6}").unwrap();
         let vo = v.as_object().unwrap();
-        assert!(vo["a"].as_f64().unwrap() - 1e6 < std::f64::EPSILON);
+        assert!((vo["a"].as_f64().unwrap() - 1e6).abs() < f64::EPSILON);
 
         let v: Value = from_str("{\"a\":-1e6}").unwrap();
         let vo = v.as_object().unwrap();
-        assert!(vo["a"].as_f64().unwrap() + 1e6 > -(std::f64::EPSILON));
+        assert!((vo["a"].as_f64().unwrap() + 1e6).abs() < f64::EPSILON);
     }
 }

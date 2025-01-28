@@ -1,12 +1,13 @@
 use super::EnvironmentVariable;
 use crate::fs::{binaries as test_bins_path, executable_path};
-use std::ffi::{OsStr, OsString};
-use std::fmt;
-use std::path::Path;
-use std::process::{Command, ExitStatus};
+use std::{
+    ffi::{OsStr, OsString},
+    fmt,
+    process::{Command, ExitStatus},
+};
 
 pub trait Executable {
-    fn execute(&mut self) -> NuResult;
+    fn execute(&mut self) -> Result<Outcome, NuError>;
 }
 
 #[derive(Clone, Debug)]
@@ -24,8 +25,6 @@ impl Outcome {
     }
 }
 
-pub type NuResult = Result<Outcome, NuError>;
-
 #[derive(Debug)]
 pub struct NuError {
     pub desc: String,
@@ -33,7 +32,7 @@ pub struct NuError {
     pub output: Option<Outcome>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct NuProcess {
     pub arguments: Vec<OsString>,
     pub environment_vars: Vec<EnvironmentVariable>,
@@ -49,16 +48,6 @@ impl fmt::Display for NuProcess {
         }
 
         write!(f, "`")
-    }
-}
-
-impl Default for NuProcess {
-    fn default() -> Self {
-        Self {
-            arguments: vec![],
-            environment_vars: Vec::default(),
-            cwd: None,
-        }
     }
 }
 
@@ -79,22 +68,18 @@ impl NuProcess {
         self
     }
 
-    pub fn get_cwd(&self) -> Option<&Path> {
-        self.cwd.as_ref().map(Path::new)
-    }
-
     pub fn construct(&self) -> Command {
-        let mut command = Command::new(&executable_path());
+        let mut command = Command::new(executable_path());
 
-        if let Some(cwd) = self.get_cwd() {
+        if let Some(cwd) = &self.cwd {
             command.current_dir(cwd);
         }
 
         command.env_clear();
 
-        let paths = vec![test_bins_path()];
+        let paths = [test_bins_path()];
 
-        let paths_joined = match std::env::join_paths(&paths) {
+        let paths_joined = match std::env::join_paths(paths) {
             Ok(all) => all,
             Err(_) => panic!("Couldn't join paths for PATH var."),
         };

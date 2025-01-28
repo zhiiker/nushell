@@ -8,37 +8,45 @@ mod rows {
             r#"
             echo [
                 [service, status];
-            
-                [ruby,      DOWN] 
-                [db,        DOWN] 
-                [nud,       DOWN] 
+
+                [ruby,      DOWN]
+                [db,        DOWN]
+                [nud,       DOWN]
                 [expected,  HERE]
             ]"#,
         )
     }
 
     #[test]
-    fn roll_down_by_default() {
-        let actual = nu!(
-        cwd: ".",
-        format!("{} | {}", table(), pipeline(r#"
-            roll
-            | first
-            | get status
-        "#)));
+    fn can_roll_down() {
+        let actual = nu!(format!(
+            "{} | {}",
+            table(),
+            pipeline(
+                "
+                roll down
+                | first
+                | get status
+            "
+            )
+        ));
 
         assert_eq!(actual.out, "HERE");
     }
 
     #[test]
     fn can_roll_up() {
-        let actual = nu!(
-        cwd: ".",
-        format!("{} | {}", table(), pipeline(r#"
-            roll up 3
-            | first
-            | get status
-        "#)));
+        let actual = nu!(format!(
+            "{} | {}",
+            table(),
+            pipeline(
+                "
+                roll up --by 3
+                | first
+                | get status
+            "
+            )
+        ));
 
         assert_eq!(actual.out, "HERE");
     }
@@ -52,10 +60,10 @@ mod columns {
             r#"
             echo [
                 [commit_author, origin,      stars];
-            
-                [     "Andres",     EC, amarillito] 
-                [     "Darren",     US,      black] 
-                [   "Jonathan",     US,      black] 
+
+                [     "Andres",     EC, amarillito]
+                [     "Darren",     US,      black]
+                [   "JT",     US,      black]
                 [     "Yehuda",     US,      black]
                 [      "Jason",     CA,       gold]
             ]"#,
@@ -63,42 +71,49 @@ mod columns {
     }
 
     #[test]
-    fn roll_left_by_default() {
-        let actual = nu!(
-        cwd: ".",
-        format!("{} | {}", table(), pipeline(r#"
-            roll column
-            | get
-            | str collect "-"
-        "#)));
+    fn can_roll_left() {
+        let actual = nu!(format!(
+            "{} | {}",
+            table(),
+            pipeline(
+                r#"
+            roll left
+            | columns
+            | str join "-"
+        "#
+            )
+        ));
 
         assert_eq!(actual.out, "origin-stars-commit_author");
     }
 
     #[test]
-    fn can_roll_in_the_opposite_direction() {
-        let actual = nu!(
-        cwd: ".",
-        format!("{} | {}", table(), pipeline(r#"
-            roll column 2 --opposite
-            | get
-            | str collect "-"
-        "#)));
+    fn can_roll_right() {
+        let actual = nu!(format!(
+            "{} | {}",
+            table(),
+            pipeline(
+                r#"
+            roll right --by 2
+            | columns
+            | str join "-"
+        "#
+            )
+        ));
 
         assert_eq!(actual.out, "origin-stars-commit_author");
     }
 
-    struct ThirtieTwo<'a>(usize, &'a str);
+    struct ThirtyTwo<'a>(usize, &'a str);
 
     #[test]
     fn can_roll_the_cells_only_keeping_the_header_names() {
         let four_bitstring = bitstring_to_nu_row_pipeline("00000100");
-        let expected_value = ThirtieTwo(32, "bit1-bit2-bit3-bit4-bit5-bit6-bit7-bit8");
+        let expected_value = ThirtyTwo(32, "bit1-bit2-bit3-bit4-bit5-bit6-bit7-bit8");
 
-        let actual = nu!(
-            cwd: ".",
-            format!("{} | roll column 3 --opposite --cells-only | get | str collect '-' ", four_bitstring)
-        );
+        let actual = nu!(format!(
+            "{four_bitstring} | roll right --by 3 --cells-only | columns | str join '-' "
+        ));
 
         assert_eq!(actual.out, expected_value.1);
     }
@@ -106,7 +121,7 @@ mod columns {
     #[test]
     fn four_in_bitstring_left_shifted_with_three_bits_should_be_32_in_decimal() {
         let four_bitstring = "00000100";
-        let expected_value = ThirtieTwo(32, "00100000");
+        let expected_value = ThirtyTwo(32, "00100000");
 
         assert_eq!(
             shift_three_bits_to_the_left_to_bitstring(four_bitstring),
@@ -122,7 +137,7 @@ mod columns {
         //
         // output:
         //  [
-        //   [Column1, Column2, Column3, Column4, Column5, Column6, Column7, Column8];
+        //   [column1, column2, column3, column4, column5, column6, column7, column8];
         //   [      0,       0,       0,       0,       0,       1,       0,       0]
         //  ]
         //
@@ -132,19 +147,21 @@ mod columns {
         // decimal value.
         let nu_row_literal_bitstring_to_decimal_value_pipeline = pipeline(
             r#"
-            pivot bit --ignore-titles
+            transpose bit --ignore-titles
             | get bit
             | reverse
-            | each --numbered {
+            | enumerate
+            | each { |it|
                 $it.item * (2 ** $it.index)
             }
             | math sum
         "#,
         );
-
+        println!(
+            "{bitstring_as_nu_row_pipeline} | roll left --by 3 | {nu_row_literal_bitstring_to_decimal_value_pipeline}"
+        );
         nu!(
-            cwd: ".",
-            format!("{} | roll column 3 | {}", bitstring_as_nu_row_pipeline, nu_row_literal_bitstring_to_decimal_value_pipeline)
+            format!("{bitstring_as_nu_row_pipeline} | roll left --by 3 | {nu_row_literal_bitstring_to_decimal_value_pipeline}")
         ).out
     }
 
@@ -155,9 +172,8 @@ mod columns {
             pipeline(
                 r#"
             split chars
-            | each { str to-int }
-            | rotate counter-clockwise _
-            | reject _
+            | each { |it| $it | into int }
+            | rotate --ccw
             | rename bit1 bit2 bit3 bit4 bit5 bit6 bit7 bit8
         "#
             )

@@ -8,11 +8,11 @@ mod simple {
     #[test]
     fn extracts_fields_from_the_given_the_pattern() {
         Playground::setup("parse_test_1", |dirs, sandbox| {
-            sandbox.with_files(vec![Stub::FileWithContentToBeTrimmed(
+            sandbox.with_files(&[Stub::FileWithContentToBeTrimmed(
                 "key_value_separated_arepa_ingredients.txt",
                 r#"
                     VAR1=Cheese
-                    VAR2=JonathanParsed
+                    VAR2=JTParsed
                     VAR3=NushellSecretIngredient
                 "#,
             )]);
@@ -22,25 +22,26 @@ mod simple {
                 r#"
                     open key_value_separated_arepa_ingredients.txt
                     | lines
-                    | each { echo $it | parse "{Name}={Value}" }
-                    | nth 1
+                    | each { |it| echo $it | parse "{Name}={Value}" }
+                    | flatten
+                    | get 1
                     | get Value
                 "#
             ));
 
-            assert_eq!(actual.out, "JonathanParsed");
+            assert_eq!(actual.out, "JTParsed");
         })
     }
 
     #[test]
-    fn double_open_curly_evalutes_to_a_single_curly() {
+    fn double_open_curly_evaluates_to_a_single_curly() {
         Playground::setup("parse_test_regex_2", |dirs, _sandbox| {
             let actual = nu!(
                 cwd: dirs.test(), pipeline(
                 r#"
                     echo "{abc}123"
                     | parse "{{abc}{name}"
-                    | get name
+                    | get name.0
                 "#
             ));
 
@@ -56,7 +57,7 @@ mod simple {
                 r#"
                     echo "(abc)123"
                     | parse "(abc){name}"
-                    | get name
+                    | get name.0
                 "#
             ));
 
@@ -73,7 +74,7 @@ mod simple {
                     echo ["1:INFO:component:all is well" "2:ERROR::something bad happened"]
                     | parse "{timestamp}:{level}:{tag}:{entry}"
                     | get entry
-                    | nth 1
+                    | get 1
                 "#
             ));
 
@@ -93,7 +94,9 @@ mod simple {
                 "#
             ));
 
-            assert!(actual.err.contains("invalid parse pattern"));
+            assert!(actual
+                .err
+                .contains("Found opening `{` without an associated closing `}`"));
         })
     }
 }
@@ -114,14 +117,14 @@ mod regex {
     #[test]
     fn extracts_fields_with_all_named_groups() {
         Playground::setup("parse_test_regex_1", |dirs, sandbox| {
-            sandbox.with_files(nushell_git_log_oneline());
+            sandbox.with_files(&nushell_git_log_oneline());
 
             let actual = nu!(
                 cwd: dirs.test(), pipeline(
                 r#"
                     open nushell_git_log_oneline.txt
-                    | parse --regex "(?P<Hash>\w+) (?P<Message>.+) \(#(?P<PR>\d+)\)"
-                    | nth 1
+                    | parse --regex "(?P<Hash>\\w+) (?P<Message>.+) \\(#(?P<PR>\\d+)\\)"
+                    | get 1
                     | get PR
                 "#
             ));
@@ -133,15 +136,15 @@ mod regex {
     #[test]
     fn extracts_fields_with_all_unnamed_groups() {
         Playground::setup("parse_test_regex_2", |dirs, sandbox| {
-            sandbox.with_files(nushell_git_log_oneline());
+            sandbox.with_files(&nushell_git_log_oneline());
 
             let actual = nu!(
                 cwd: dirs.test(), pipeline(
                 r#"
                     open nushell_git_log_oneline.txt
-                    | parse --regex "(\w+) (.+) \(#(\d+)\)"
-                    | nth 1
-                    | get Capture1
+                    | parse --regex "(\\w+) (.+) \\(#(\\d+)\\)"
+                    | get 1
+                    | get capture0
                 "#
             ));
 
@@ -152,15 +155,15 @@ mod regex {
     #[test]
     fn extracts_fields_with_named_and_unnamed_groups() {
         Playground::setup("parse_test_regex_3", |dirs, sandbox| {
-            sandbox.with_files(nushell_git_log_oneline());
+            sandbox.with_files(&nushell_git_log_oneline());
 
             let actual = nu!(
                 cwd: dirs.test(), pipeline(
                 r#"
                     open nushell_git_log_oneline.txt
-                    | parse --regex "(?P<Hash>\w+) (.+) \(#(?P<PR>\d+)\)"
-                    | nth 1
-                    | get Capture2
+                    | parse --regex "(?P<Hash>\\w+) (.+) \\(#(?P<PR>\\d+)\\)"
+                    | get 1
+                    | get capture1
                 "#
             ));
 
@@ -171,17 +174,56 @@ mod regex {
     #[test]
     fn errors_with_invalid_regex() {
         Playground::setup("parse_test_regex_1", |dirs, sandbox| {
-            sandbox.with_files(nushell_git_log_oneline());
+            sandbox.with_files(&nushell_git_log_oneline());
 
             let actual = nu!(
                 cwd: dirs.test(), pipeline(
                 r#"
                     open nushell_git_log_oneline.txt
-                    | parse --regex "(?P<Hash>\w+ unfinished capture group"
+                    | parse --regex "(?P<Hash>\\w+ unfinished capture group"
                 "#
             ));
 
-            assert!(actual.err.contains("unclosed group"));
+            assert!(actual
+                .err
+                .contains("Opening parenthesis without closing parenthesis"));
+        })
+    }
+
+    #[test]
+    fn parse_works_with_streaming() {
+        let actual =
+            nu!(r#"seq char a z | each {|c| $c + " a"} | parse '{letter} {a}' | describe"#);
+
+        assert_eq!(actual.out, "table<letter: string, a: string> (stream)")
+    }
+
+    #[test]
+    fn parse_does_not_truncate_list_streams() {
+        let actual = nu!(pipeline(
+            r#"
+                [a b c]
+                | each {|x| $x}
+                | parse --regex "[ac]"
+                | length
+            "#
+        ));
+
+        assert_eq!(actual.out, "2");
+    }
+
+    #[test]
+    fn parse_handles_external_stream_chunking() {
+        Playground::setup("parse_test_streaming_1", |dirs, sandbox| {
+            let data: String = "abcdefghijklmnopqrstuvwxyz".repeat(1000);
+            sandbox.with_files(&[Stub::FileWithContent("data.txt", &data)]);
+
+            let actual = nu!(
+                cwd: dirs.test(),
+                r#"open data.txt | parse --regex "(abcdefghijklmnopqrstuvwxyz)" | length"#
+            );
+
+            assert_eq!(actual.out, "1000");
         })
     }
 }

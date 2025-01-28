@@ -1,7 +1,7 @@
-# nu-command
+This crate contains the majority of our commands
 
-The Nu command crate contains the full set of internal commands, that is, the commands that can be form the set of built-in commands in a Nushell engine.
+We allow ourselves to move some of the commands in `nu-command` to `nu-cmd-*` crates as needed.
 
-The default set of commands that Nushell ships with can be found in the [default context](src/default_context.rs).
+## Internal Nushell crate
 
-The commands themselves live in the [commands module](src/commands/).
+This crate implements components of Nushell and is not designed to support plugin authors or other users directly.

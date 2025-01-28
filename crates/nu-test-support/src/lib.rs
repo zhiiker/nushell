@@ -1,12 +1,19 @@
+#![doc = include_str!("../README.md")]
 pub mod commands;
 pub mod fs;
+pub mod locale_override;
 pub mod macros;
 pub mod playground;
-pub mod value;
+use std::process::ExitStatus;
 
+// Needs to be reexported for `nu!` macro
+pub use nu_path;
+
+#[derive(Debug)]
 pub struct Outcome {
     pub out: String,
     pub err: String,
+    pub status: ExitStatus,
 }
 
 #[cfg(windows)]
@@ -20,20 +27,42 @@ pub const NATIVE_PATH_ENV_SEPARATOR: char = ';';
 pub const NATIVE_PATH_ENV_SEPARATOR: char = ':';
 
 impl Outcome {
-    pub fn new(out: String, err: String) -> Outcome {
-        Outcome { out, err }
+    pub fn new(out: String, err: String, status: ExitStatus) -> Outcome {
+        Outcome { out, err, status }
     }
 }
 
+/// Reformat a multiline pipeline into a single line for use with `nu -c`
+///
+/// Warning: Will not correctly handle statements that are not `;` separated!
 pub fn pipeline(commands: &str) -> String {
     commands
+        .trim()
         .lines()
-        .skip(1)
         .map(|line| line.trim())
         .collect::<Vec<&str>>()
         .join(" ")
         .trim_end()
         .to_string()
+}
+
+pub fn nu_repl_code(source_lines: &[&str]) -> String {
+    let mut out = String::from("nu --testbin=nu_repl ...[ ");
+
+    for line in source_lines.iter() {
+        // convert each "line" to really be a single line to prevent nu! macro joining the newlines
+        // with ';'
+        let line = pipeline(line);
+
+        out.push('`');
+        out.push_str(&line);
+        out.push('`');
+        out.push(' ');
+    }
+
+    out.push(']');
+
+    out
 }
 
 pub fn shell_os_paths() -> Vec<std::path::PathBuf> {
@@ -57,7 +86,7 @@ mod tests {
                 open los_tres_amigos.txt
                 | from-csv
                 | get rusty_luck
-                | str to-int
+                | into int
                 | math sum
                 | echo "$it"
             "#,
@@ -65,7 +94,7 @@ mod tests {
 
         assert_eq!(
             actual,
-            r#"open los_tres_amigos.txt | from-csv | get rusty_luck | str to-int | math sum | echo "$it""#
+            r#"open los_tres_amigos.txt | from-csv | get rusty_luck | into int | math sum | echo "$it""#
         );
     }
 }

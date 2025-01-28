@@ -1,46 +1,72 @@
-use nu_protocol::hir::{Expression, ExternalArgs, ExternalCommand, SpannedExpression};
-use nu_source::{Span, SpannedItem, Tag};
+use std::{
+    io::Read,
+    process::{Command, Stdio},
+    sync::{
+        atomic::{AtomicBool, Ordering::Relaxed},
+        Mutex,
+    },
+};
 
-pub struct ExternalBuilder {
-    name: String,
-    args: Vec<String>,
-}
+static CARGO_BUILD_LOCK: Mutex<()> = Mutex::new(());
+static PLUGINS_BUILT: AtomicBool = AtomicBool::new(false);
 
-impl ExternalBuilder {
-    pub fn for_name(name: &str) -> ExternalBuilder {
-        ExternalBuilder {
-            name: name.to_string(),
-            args: vec![],
+// This runs `cargo build --package nu_plugin_*` to ensure that all plugins
+// have been built before plugin tests run. We use a lock to avoid multiple
+// simultaneous `cargo build` invocations clobbering each other.
+pub fn ensure_plugins_built() {
+    let _guard = CARGO_BUILD_LOCK.lock().expect("could not get mutex lock");
+
+    if PLUGINS_BUILT.load(Relaxed) {
+        return;
+    }
+
+    let cargo_path = env!("CARGO");
+    let mut arguments = vec![
+        "build",
+        "--workspace",
+        "--bins",
+        // Don't build nu, so that we only build the plugins
+        "--exclude",
+        "nu",
+        // Exclude nu_plugin_polars, because it's not needed at this stage, and is a large build
+        "--exclude",
+        "nu_plugin_polars",
+        "--quiet",
+    ];
+
+    let profile = std::env::var("NUSHELL_CARGO_PROFILE");
+    if let Ok(profile) = &profile {
+        arguments.push("--profile");
+        arguments.push(profile);
+    }
+
+    let mut command = Command::new(cargo_path)
+        .args(arguments)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to spawn cargo build command");
+
+    let stderr = command.stderr.take();
+
+    let success = command
+        .wait()
+        .expect("failed to wait cargo build command")
+        .success();
+
+    if let Some(mut stderr) = stderr {
+        let mut buffer = String::new();
+        stderr
+            .read_to_string(&mut buffer)
+            .expect("failed to read cargo build stderr");
+        if !buffer.is_empty() {
+            println!("=== cargo build stderr\n{buffer}");
         }
     }
 
-    pub fn arg(&mut self, value: &str) -> &mut Self {
-        self.args.push(value.to_string());
-        self
+    if !success {
+        panic!("cargo build failed");
     }
 
-    pub fn build(&mut self) -> ExternalCommand {
-        let mut path = crate::fs::binaries();
-        path.push(&self.name);
-
-        let name = path.to_string_lossy().to_string().spanned(Span::unknown());
-
-        let args = self
-            .args
-            .iter()
-            .map(|arg| SpannedExpression {
-                expr: Expression::string(arg.to_string()),
-                span: Span::unknown(),
-            })
-            .collect::<Vec<_>>();
-
-        ExternalCommand {
-            name: name.to_string(),
-            name_tag: Tag::unknown(),
-            args: ExternalArgs {
-                list: args,
-                span: name.span,
-            },
-        }
-    }
+    PLUGINS_BUILT.store(true, Relaxed);
 }

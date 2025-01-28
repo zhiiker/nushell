@@ -5,11 +5,11 @@ fn splits_empty_path() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo '' | path split
+            echo '' | path split | is-empty
         "#
     ));
 
-    assert_eq!(actual.out, "");
+    assert_eq!(actual.out, "true");
 }
 
 #[test]
@@ -17,7 +17,7 @@ fn splits_correctly_single_path() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo ['home/viking/spam.txt']
+            'home/viking/spam.txt'
             | path split
             | last
         "#
@@ -27,21 +27,11 @@ fn splits_correctly_single_path() {
 }
 
 #[test]
-fn splits_correctly_with_column_path() {
-    let actual = nu!(
-        cwd: "tests", pipeline(
-        r#"
-            echo [
-                [home, barn];
+fn splits_correctly_single_path_const() {
+    let actual = nu!(r#"
+        const result = ('home/viking/spam.txt' | path split);
+        $result | last
+    "#);
 
-                ['home/viking/spam.txt', 'barn/cow/moo.png']
-                ['home/viking/eggs.txt', 'barn/goat/cheese.png']
-            ]
-            | path split -c [ home barn ]
-            | get barn
-            | length
-        "#
-    ));
-
-    assert_eq!(actual.out, "6");
+    assert_eq!(actual.out, "spam.txt");
 }

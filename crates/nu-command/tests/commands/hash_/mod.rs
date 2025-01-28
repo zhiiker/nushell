@@ -2,86 +2,56 @@ use nu_test_support::{nu, pipeline};
 
 #[test]
 fn base64_defaults_to_encoding_with_standard_character_type() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        echo 'username:password' | hash base64 
-        "#
-        )
-    );
+    let actual = nu!(r#"
+        echo 'username:password' | encode base64
+        "#);
 
     assert_eq!(actual.out, "dXNlcm5hbWU6cGFzc3dvcmQ=");
 }
 
 #[test]
-fn base64_encode_characterset_binhex() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        echo 'username:password' | hash base64 --character_set binhex --encode
-        "#
-        )
-    );
+fn base64_defaults_to_encoding_with_nopad() {
+    let actual = nu!(r#"
+        echo 'username:password' | encode base64 --nopad
+        "#);
 
-    assert_eq!(actual.out, "F@0NEPjJD97kE\'&bEhFZEP3");
+    assert_eq!(actual.out, "dXNlcm5hbWU6cGFzc3dvcmQ");
 }
 
 #[test]
-fn error_when_invalid_character_set_given() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        echo 'username:password' | hash base64 --character_set 'this is invalid' --encode
-        "#
-        )
-    );
+fn base64_decode_value() {
+    let actual = nu!(r#"
+        echo 'YWJjeHl6' | decode base64 | decode
+        "#);
 
-    assert!(actual
-        .err
-        .contains("this is invalid is not a valid character-set"));
+    assert_eq!(actual.out, "abcxyz");
 }
 
 #[test]
-fn base64_decode_characterset_binhex() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        echo "F@0NEPjJD97kE'&bEhFZEP3" | hash base64 --character_set binhex --decode
-        "#
-        )
-    );
+fn base64_decode_with_nopad() {
+    let actual = nu!(r#"
+        echo 'R29vZCBsdWNrIHRvIHlvdQ' | decode base64 --nopad | decode
+        "#);
 
-    assert_eq!(actual.out, "username:password");
+    assert_eq!(actual.out, "Good luck to you");
+}
+
+#[test]
+fn base64_decode_with_url() {
+    let actual = nu!(r#"
+        echo 'vu7_' | decode base64 --url | decode
+        "#);
+
+    assert_eq!(actual.out, "¾îÿ");
 }
 
 #[test]
 fn error_invalid_decode_value() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        echo "this should not be a valid encoded value" | hash base64 --character_set url-safe --decode
-        "#
-        )
-    );
+    let actual = nu!(r#"
+        echo "this should not be a valid encoded value" | decode base64
+        "#);
 
-    assert!(actual
-        .err
-        .contains("invalid base64 input for character set url-safe"));
-}
-
-#[test]
-fn error_use_both_flags() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        echo 'username:password' | hash base64 --encode --decode
-        "#
-        )
-    );
-
-    assert!(actual
-        .err
-        .contains("only one of --decode and --encode flags can be used"));
+    assert!(actual.err.contains("nu::shell::incorrect_value"));
 }
 
 #[test]
@@ -89,7 +59,7 @@ fn md5_works_with_file() {
     let actual = nu!(
         cwd: "tests/fixtures/formats", pipeline(
         r#"
-        open sample.db | hash md5 
+        open sample.db --raw | hash md5
         "#
         )
     );
@@ -102,7 +72,7 @@ fn sha256_works_with_file() {
     let actual = nu!(
         cwd: "tests/fixtures/formats", pipeline(
         r#"
-        open sample.db | hash sha256
+        open sample.db --raw | hash sha256
         "#
         )
     );

@@ -2,85 +2,56 @@ use nu_test_support::{nu, pipeline};
 
 #[test]
 fn reports_emptiness() {
-    let actual = nu!(
-        cwd: ".", pipeline(
+    let actual = nu!(pipeline(
         r#"
-            echo [[are_empty];
-                     [([[check]; [[]]      ])]
-                     [([[check]; [""]      ])]
-                     [([[check]; [(wrap)] ])]
-            ]
-            | get are_empty
-            | empty? check
-            | where check
-            | length
+            [[] '' {} null]
+            | all {||
+              is-empty
+            }
         "#
     ));
 
-    assert_eq!(actual.out, "3");
+    assert_eq!(actual.out, "true");
 }
 
 #[test]
-fn sets_block_run_value_for_an_empty_column() {
-    let actual = nu!(
-        cwd: ".", pipeline(
+fn reports_nonemptiness() {
+    let actual = nu!(pipeline(
         r#"
-            echo [
-                     [  first_name, last_name,   rusty_at, likes  ];
-                     [      Andrés,  Robalino, 10/11/2013,   1    ]
-                     [    Jonathan,    Turner, 10/12/2013,   1    ]
-                     [       Jason,     Gedge, 10/11/2013,   1    ]
-                     [      Yehuda,      Katz, 10/11/2013,  ''    ]
-            ]
-            | empty? likes -b { 1 }
-            | get likes
-            | math sum
+            [[1] ' ' {a:1} 0]
+            | any {||
+              is-empty
+            }
         "#
     ));
 
-    assert_eq!(actual.out, "4");
+    assert_eq!(actual.out, "false");
 }
 
 #[test]
-fn sets_block_run_value_for_many_empty_columns() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-            echo [
-                     [  boost   check   ];
-                     [     1,    []     ]
-                     [     1,    ""     ]
-                     [     1,  (wrap)  ]
-            ]
-            | empty? boost check -b { 1 }
-            | get boost check
-            | math sum
-        "#
+fn reports_emptiness_by_columns() {
+    let actual = nu!(pipeline(
+        "
+            [{a:1 b:null c:null} {a:2 b:null c:null}]
+            | any {||
+              is-empty b c
+            }
+        "
     ));
 
-    assert_eq!(actual.out, "6");
+    assert_eq!(actual.out, "true");
 }
 
 #[test]
-fn passing_a_block_will_set_contents_on_empty_cells_and_leave_non_empty_ones_untouched() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-            echo [
-                     [      NAME, LVL,   HP ];
-                     [    Andrés,  30, 3000 ]
-                     [  Alistair,  29, 2900 ]
-                     [    Arepas,  "",   "" ]
-                     [     Jorge,  30, 3000 ]
-            ]
-            | empty? LVL -b { 9 }
-            | empty? HP -b {
-                $it.LVL * 1000
-              }
-            | math sum
-            | get HP
-        "#
+fn reports_nonemptiness_by_columns() {
+    let actual = nu!(pipeline(
+        "
+            [{a:1 b:null c:3} {a:null b:5 c:2}]
+            | any {||
+              is-empty a b
+            }
+        "
     ));
 
-    assert_eq!(actual.out, "17900");
+    assert_eq!(actual.out, "false");
 }

@@ -9,11 +9,18 @@ fn creates_the_resulting_string_from_the_given_fields() {
         r#"
         open cargo_sample.toml
             | get package
-            | format "{name} has license {license}"
+            | format pattern "{name} has license {license}"
         "#
     ));
 
     assert_eq!(actual.out, "nu has license ISC");
+}
+
+#[test]
+fn format_input_record_output_string() {
+    let actual = nu!(r#"{name: Downloads} | format pattern "{name}""#);
+
+    assert_eq!(actual.out, "Downloads");
 }
 
 #[test]
@@ -22,7 +29,7 @@ fn given_fields_can_be_column_paths() {
         cwd: "tests/fixtures/formats", pipeline(
         r#"
         open cargo_sample.toml
-            | format "{package.name} is {package.description}"
+            | format pattern "{package.name} is {package.description}"
         "#
     ));
 
@@ -30,38 +37,52 @@ fn given_fields_can_be_column_paths() {
 }
 
 #[test]
-fn can_use_variables() {
+fn cant_use_variables() {
     let actual = nu!(
         cwd: "tests/fixtures/formats", pipeline(
         r#"
         open cargo_sample.toml
-            | format "{$it.package.name} is {$it.package.description}"
+            | format pattern "{$it.package.name} is {$it.package.description}"
         "#
     ));
 
-    assert_eq!(actual.out, "nu is a new type of shell");
+    // TODO SPAN: This has been removed during SpanId refactor
+    assert!(actual.err.contains("Removed functionality"));
+}
+
+#[test]
+fn error_unmatched_brace() {
+    let actual = nu!(
+        cwd: "tests/fixtures/formats", pipeline(
+        r#"
+        open cargo_sample.toml
+            | format pattern "{package.name"
+        "#
+    ));
+
+    assert!(actual.err.contains("unmatched curly brace"));
 }
 
 #[test]
 fn format_filesize_works() {
     Playground::setup("format_filesize_test_1", |dirs, sandbox| {
-        sandbox.with_files(vec![
+        sandbox.with_files(&[
             EmptyFile("yehuda.txt"),
-            EmptyFile("jonathan.txt"),
+            EmptyFile("jttxt"),
             EmptyFile("andres.txt"),
         ]);
 
         let actual = nu!(
             cwd: dirs.test(), pipeline(
-            r#"
+            "
                 ls
-                | format filesize size KB
+                | format filesize kB size
                 | get size
                 | first
-            "#
+            "
         ));
 
-        assert_eq!(actual.out, "0.0 KB");
+        assert_eq!(actual.out, "0 kB");
     })
 }
 
@@ -70,7 +91,7 @@ fn format_filesize_works_with_nonempty_files() {
     Playground::setup(
         "format_filesize_works_with_nonempty_files",
         |dirs, sandbox| {
-            sandbox.with_files(vec![FileWithContentToBeTrimmed(
+            sandbox.with_files(&[FileWithContentToBeTrimmed(
                 "sample.toml",
                 r#"
                     [dependency]
@@ -80,14 +101,14 @@ fn format_filesize_works_with_nonempty_files() {
 
             let actual = nu!(
                 cwd: dirs.test(),
-                "ls sample.toml | format filesize size B | get size | first"
+                "ls sample.toml | format filesize B size | get size | first"
             );
 
             #[cfg(not(windows))]
-            assert_eq!(actual.out, "25");
+            assert_eq!(actual.out, "25 B");
 
             #[cfg(windows)]
-            assert_eq!(actual.out, "27");
+            assert_eq!(actual.out, "27 B");
         },
     )
 }

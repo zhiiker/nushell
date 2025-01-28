@@ -1,4 +1,5 @@
-mod collect;
+mod into_string;
+mod join;
 
 use nu_test_support::fs::Stub::FileWithContent;
 use nu_test_support::playground::Playground;
@@ -7,7 +8,7 @@ use nu_test_support::{nu, pipeline};
 #[test]
 fn trims() {
     Playground::setup("str_test_1", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                     [dependency]
@@ -26,13 +27,11 @@ fn trims() {
 
 #[test]
 fn error_trim_multiple_chars() {
-    let actual = nu!(
-        cwd: ".", pipeline(
+    let actual = nu!(pipeline(
         r#"
-        echo 'does it work now?!' | str trim -c '?!'
+        echo "does it work now?!" | str trim --char "?!"
         "#
-        )
-    );
+    ));
 
     assert!(actual.err.contains("char"));
 }
@@ -40,7 +39,7 @@ fn error_trim_multiple_chars() {
 #[test]
 fn capitalizes() {
     Playground::setup("str_test_2", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                     [dependency]
@@ -60,7 +59,7 @@ fn capitalizes() {
 #[test]
 fn downcases() {
     Playground::setup("str_test_3", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                     [dependency]
@@ -78,9 +77,16 @@ fn downcases() {
 }
 
 #[test]
+fn non_ascii_downcase() {
+    let actual = nu!("'ὈΔΥΣΣΕΎΣ' | str downcase");
+
+    assert_eq!(actual.out, "ὀδυσσεύς");
+}
+
+#[test]
 fn upcases() {
     Playground::setup("str_test_4", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                     [package]
@@ -98,9 +104,17 @@ fn upcases() {
 }
 
 #[test]
+fn non_ascii_upcase() {
+    let actual = nu!("'ὀδυσσεύς' | str upcase");
+
+    assert_eq!(actual.out, "ὈΔΥΣΣΕΎΣ");
+}
+
+#[test]
+#[ignore = "Playgrounds are not supported in nu-cmd-extra"]
 fn camelcases() {
     Playground::setup("str_test_3", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                     [dependency]
@@ -119,15 +133,14 @@ fn camelcases() {
 
 #[test]
 fn converts_to_int() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
+    let actual = nu!(pipeline(
         r#"
-            echo '{number_as_string: "1"}'
+            echo '[{number_as_string: "1"}]'
             | from json
-            | str to-int number_as_string
+            | into int number_as_string
             | rename number
             | where number == 1
-            | get number
+            | get number.0
 
         "#
     ));
@@ -136,13 +149,12 @@ fn converts_to_int() {
 }
 
 #[test]
-fn converts_to_decimal() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats", pipeline(
+fn converts_to_float() {
+    let actual = nu!(pipeline(
         r#"
             echo "3.1, 0.0415"
             | split row ","
-            | str to-decimal
+            | into float
             | math sum
         "#
     ));
@@ -153,7 +165,7 @@ fn converts_to_decimal() {
 #[test]
 fn find_and_replaces() {
     Playground::setup("str_test_6", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [fortune.teller]
@@ -165,7 +177,7 @@ fn find_and_replaces() {
             cwd: dirs.test(), pipeline(
             r#"
                  open sample.toml
-                 | str find-replace KATZ "5289" fortune.teller.phone
+                 | str replace KATZ "5289" fortune.teller.phone
                  | get fortune.teller.phone
              "#
         ));
@@ -177,7 +189,7 @@ fn find_and_replaces() {
 #[test]
 fn find_and_replaces_without_passing_field() {
     Playground::setup("str_test_7", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [fortune.teller]
@@ -190,7 +202,7 @@ fn find_and_replaces_without_passing_field() {
             r#"
                  open sample.toml
                  | get fortune.teller.phone
-                 | str find-replace KATZ "5289"
+                 | str replace KATZ "5289"
              "#
         ));
 
@@ -199,9 +211,29 @@ fn find_and_replaces_without_passing_field() {
 }
 
 #[test]
+fn regex_error_in_pattern() {
+    Playground::setup("str_test_8", |dirs, _sandbox| {
+        let actual = nu!(
+            cwd: dirs.test(), pipeline(
+            r#"
+                 'source string'
+                 | str replace -r 'source \Ufoo' "destination"
+             "#
+        ));
+
+        let err = actual.err;
+        let expecting_str = "Incorrect value";
+        assert!(
+            err.contains(expecting_str),
+            "Error should contain '{expecting_str}', but was: {err}"
+        );
+    })
+}
+
+#[test]
 fn substrings_the_input() {
     Playground::setup("str_test_8", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [fortune.teller]
@@ -213,7 +245,7 @@ fn substrings_the_input() {
             cwd: dirs.test(), pipeline(
             r#"
                  open sample.toml
-                 | str substring 6,14 fortune.teller.phone
+                 | str substring 6..14 fortune.teller.phone
                  | get fortune.teller.phone
              "#
         ));
@@ -223,9 +255,9 @@ fn substrings_the_input() {
 }
 
 #[test]
-fn substring_errors_if_start_index_is_greater_than_end_index() {
+fn substring_empty_if_start_index_is_greater_than_end_index() {
     Playground::setup("str_test_9", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [fortune.teller]
@@ -237,20 +269,18 @@ fn substring_errors_if_start_index_is_greater_than_end_index() {
             cwd: dirs.test(), pipeline(
             r#"
                  open sample.toml
-                 | str substring 6,5 fortune.teller.phone
+                 | str substring 6..4 fortune.teller.phone
+                 | get fortune.teller.phone
              "#
         ));
-
-        assert!(actual
-            .err
-            .contains("End must be greater than or equal to Start"))
+        assert_eq!(actual.out, "")
     })
 }
 
 #[test]
 fn substrings_the_input_and_returns_the_string_if_end_index_exceeds_length() {
     Playground::setup("str_test_10", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [package]
@@ -262,7 +292,7 @@ fn substrings_the_input_and_returns_the_string_if_end_index_exceeds_length() {
             cwd: dirs.test(), pipeline(
             r#"
                  open sample.toml
-                 | str substring 0,999 package.name
+                 | str substring 0..999 package.name
                  | get package.name
              "#
         ));
@@ -274,7 +304,7 @@ fn substrings_the_input_and_returns_the_string_if_end_index_exceeds_length() {
 #[test]
 fn substrings_the_input_and_returns_blank_if_start_index_exceeds_length() {
     Playground::setup("str_test_11", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [package]
@@ -286,7 +316,7 @@ fn substrings_the_input_and_returns_blank_if_start_index_exceeds_length() {
             cwd: dirs.test(), pipeline(
             r#"
                  open sample.toml
-                 | str substring 50,999 package.name
+                 | str substring 50..999 package.name
                  | get package.name
              "#
         ));
@@ -298,7 +328,7 @@ fn substrings_the_input_and_returns_blank_if_start_index_exceeds_length() {
 #[test]
 fn substrings_the_input_and_treats_start_index_as_zero_if_blank_start_index_given() {
     Playground::setup("str_test_12", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [package]
@@ -310,7 +340,7 @@ fn substrings_the_input_and_treats_start_index_as_zero_if_blank_start_index_give
             cwd: dirs.test(), pipeline(
             r#"
                  open sample.toml
-                 | str substring ,2 package.name
+                 | str substring ..1 package.name
                  | get package.name
              "#
         ));
@@ -322,7 +352,7 @@ fn substrings_the_input_and_treats_start_index_as_zero_if_blank_start_index_give
 #[test]
 fn substrings_the_input_and_treats_end_index_as_length_if_blank_end_index_given() {
     Playground::setup("str_test_13", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContent(
+        sandbox.with_files(&[FileWithContent(
             "sample.toml",
             r#"
                      [package]
@@ -334,7 +364,7 @@ fn substrings_the_input_and_treats_end_index_as_length_if_blank_end_index_given(
             cwd: dirs.test(), pipeline(
             r#"
                  open sample.toml
-                 | str substring 3, package.name
+                 | str substring 3.. package.name
                  | get package.name
              "#
         ));
@@ -344,13 +374,34 @@ fn substrings_the_input_and_treats_end_index_as_length_if_blank_end_index_given(
 }
 
 #[test]
+fn substring_by_negative_index() {
+    Playground::setup("str_test_13", |dirs, _| {
+        let actual = nu!(
+            cwd: dirs.test(), "'apples' | str substring 0..-1",
+        );
+        assert_eq!(actual.out, "apples");
+
+        let actual = nu!(
+            cwd: dirs.test(), "'apples' | str substring 0..<-1",
+        );
+        assert_eq!(actual.out, "apple");
+    })
+}
+
+#[test]
 fn str_reverse() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
+    let actual = nu!(r#"
         echo "nushell" | str reverse
-        "#
-    ));
+        "#);
 
     assert!(actual.out.contains("llehsun"));
+}
+
+#[test]
+fn test_redirection_trim() {
+    let actual = nu!(r#"
+        let x = (nu --testbin cococo niceone); $x | str trim | str length
+        "#);
+
+    assert_eq!(actual.out, "7");
 }

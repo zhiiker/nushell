@@ -2,6 +2,7 @@ use super::nu_process::*;
 use super::EnvironmentVariable;
 use std::ffi::OsString;
 use std::fmt;
+use std::fmt::Write;
 
 #[derive(Default, Debug)]
 pub struct Director {
@@ -59,15 +60,14 @@ impl Director {
             process.cwd(working_directory);
         }
 
-        process.arg("--skip-plugins");
         process.arg("--no-history");
         if let Some(config_file) = self.config.as_ref() {
             process.args(&[
-                "--config-file",
+                "--config",
                 config_file.to_str().expect("failed to convert."),
             ]);
         }
-        process.arg("--perf");
+        process.args(&["--log-level", "info"]);
 
         director.executable = Some(process);
         director
@@ -83,34 +83,29 @@ impl Director {
 }
 
 impl Executable for Director {
-    fn execute(&mut self) -> NuResult {
-        use std::io::Write;
+    fn execute(&mut self) -> Result<Outcome, NuError> {
         use std::process::Stdio;
 
         match self.executable() {
             Some(binary) => {
-                let mut process = match binary
+                let mut commands = String::new();
+                if let Some(pipelines) = &self.pipeline {
+                    for pipeline in pipelines {
+                        if !commands.is_empty() {
+                            commands.push_str("| ");
+                        }
+                        let _ = writeln!(commands, "{pipeline}");
+                    }
+                }
+
+                let process = binary
                     .construct()
                     .stdout(Stdio::piped())
-                    .stdin(Stdio::piped())
+                    // .stdin(Stdio::piped())
                     .stderr(Stdio::piped())
+                    .arg(format!("-c '{commands}'"))
                     .spawn()
-                {
-                    Ok(child) => child,
-                    Err(why) => panic!("Can't run test {}", why.to_string()),
-                };
-
-                if let Some(pipelines) = &self.pipeline {
-                    let child = process.stdin.as_mut().expect("Failed to open stdin");
-
-                    for pipeline in pipelines {
-                        child
-                            .write_all(format!("{}\n", pipeline).as_bytes())
-                            .expect("Could not write to");
-                    }
-
-                    child.write_all(b"exit\n").expect("Could not write to");
-                }
+                    .expect("It should be possible to run tests");
 
                 process
                     .wait_with_output()
@@ -159,5 +154,5 @@ fn read_std(std: &[u8]) -> Vec<u8> {
     let out = String::from_utf8_lossy(std);
     let out = out.lines().collect::<Vec<_>>().join("\n");
     let out = out.replace("\r\n", "");
-    out.replace("\n", "").into_bytes()
+    out.replace('\n', "").into_bytes()
 }

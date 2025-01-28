@@ -5,11 +5,11 @@ use nu_test_support::{nu, pipeline};
 #[test]
 fn adds_a_row_to_the_beginning() {
     Playground::setup("prepend_test_1", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContentToBeTrimmed(
+        sandbox.with_files(&[FileWithContentToBeTrimmed(
             "los_tres_caballeros.txt",
             r#"
                 Andrés N. Robalino
-                Jonathan Turner
+                JT Turner
                 Yehuda Katz
             "#,
         )]);
@@ -20,7 +20,7 @@ fn adds_a_row_to_the_beginning() {
                 open los_tres_caballeros.txt
                 | lines
                 | prepend "pollo loco"
-                | nth 0
+                | get 0
                 "#
         ));
 

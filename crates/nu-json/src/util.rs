@@ -44,7 +44,8 @@ where
     }
 
     pub fn eof(&mut self) -> Result<bool> {
-        Ok(self.peek()?.is_none())
+        let ch = self.peek()?;
+        Ok(matches!(ch, None | Some(b'\x00')))
     }
 
     pub fn peek_next(&mut self, idx: usize) -> Result<Option<u8>> {
@@ -57,10 +58,6 @@ where
         }
         Ok(Some(self.ch[idx]))
     }
-
-    // pub fn peek_next_or_null(&mut self, idx: usize) -> Result<u8> {
-    //     Ok(try!(self.peek_next(idx)).unwrap_or(b'\x00'))
-    // }
 
     pub fn peek(&mut self) -> Result<Option<u8>> {
         self.peek_next(0)
@@ -156,15 +153,6 @@ pub struct ParseNumber<Iter: Iterator<Item = u8>> {
     result: Vec<u8>,
 }
 
-// macro_rules! try_or_invalid {
-//     ($e:expr) => {
-//         match $e {
-//             Some(v) => v,
-//             None => { return Err(Error::Syntax(ErrorCode::InvalidNumber, 0, 0)); }
-//         }
-//     }
-// }
-
 impl<Iter: Iterator<Item = u8>> ParseNumber<Iter> {
     #[inline]
     pub fn new(iter: Iter) -> Self {
@@ -207,18 +195,19 @@ impl<Iter: Iterator<Item = u8>> ParseNumber<Iter> {
                             }
                         }
 
-                        if is_float {
-                            Ok(Number::F64(
-                                res.parse::<f64>().expect("Internal error: json parsing"),
-                            ))
-                        } else if res.starts_with('-') {
-                            Ok(Number::I64(
-                                res.parse::<i64>().expect("Internal error: json parsing"),
-                            ))
-                        } else {
-                            Ok(Number::U64(
-                                res.parse::<u64>().expect("Internal error: json parsing"),
-                            ))
+                        if !is_float {
+                            if res.starts_with('-') {
+                                if let Ok(n) = res.parse::<i64>() {
+                                    return Ok(Number::I64(n));
+                                }
+                            } else if let Ok(n) = res.parse::<u64>() {
+                                return Ok(Number::U64(n));
+                            }
+                        }
+
+                        match res.parse::<f64>() {
+                            Ok(n) => Ok(Number::F64(n)),
+                            _ => Err(Error::Syntax(ErrorCode::InvalidNumber, 0, 0)),
                         }
                     }
                     _ => Err(Error::Syntax(ErrorCode::InvalidNumber, 0, 0)),

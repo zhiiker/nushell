@@ -1,14 +1,9 @@
-use nu_test_support::fs::Stub::FileWithContentToBeTrimmed;
-use nu_test_support::playground::Playground;
 use nu_test_support::{nu, pipeline};
 use std::str::FromStr;
 
 #[test]
 fn all() {
-    Playground::setup("sum_test_1", |dirs, sandbox| {
-        sandbox.with_files(vec![FileWithContentToBeTrimmed(
-            "meals.json",
-            r#"
+    let sample = r#"
                 {
                     meals: [
                         {description: "1 large egg", calories: 90},
@@ -16,21 +11,18 @@ fn all() {
                         {description: "1 tablespoon fish oil", calories: 108}
                     ]
                 }
-            "#,
-        )]);
+            "#;
 
-        let actual = nu!(
-            cwd: dirs.test(), pipeline(
-            r#"
-                open meals.json
+    let actual = nu!(pipeline(&format!(
+        r#"
+                {sample}
                 | get meals
                 | get calories
                 | math sum
             "#
-        ));
+    )));
 
-        assert_eq!(actual.out, "448");
-    })
+    assert_eq!(actual.out, "448");
 }
 
 #[test]
@@ -45,7 +37,7 @@ fn compute_sum_of_individual_row() -> Result<(), String> {
     for (column_name, expected_value) in answers_for_columns {
         let actual = nu!(
             cwd: "tests/fixtures/formats/",
-            format!("open sample-ps-output.json | select {} | math sum | get {}", column_name, column_name)
+            format!("open sample-ps-output.json | select {column_name} | math sum | get {column_name}")
         );
         let result =
             f64::from_str(&actual.out).map_err(|_| String::from("Failed to parse float."))?;
@@ -66,7 +58,7 @@ fn compute_sum_of_table() -> Result<(), String> {
     for (column_name, expected_value) in answers_for_columns {
         let actual = nu!(
             cwd: "tests/fixtures/formats/",
-            format!("open sample-ps-output.json | select cpu mem virtual | math sum | get {}", column_name)
+            format!("open sample-ps-output.json | select cpu mem virtual | math sum | get {column_name}")
         );
         let result =
             f64::from_str(&actual.out).map_err(|_| String::from("Failed to parse float."))?;
@@ -81,7 +73,11 @@ fn sum_of_a_row_containing_a_table_is_an_error() {
         cwd: "tests/fixtures/formats/",
         "open sample-sys-output.json | math sum"
     );
-    assert!(actual
-        .err
-        .contains("Attempted to compute values that can't be operated on"));
+    assert!(actual.err.contains("can't convert record"));
+}
+
+#[test]
+fn const_sum() {
+    let actual = nu!("const SUM = [1 3] | math sum; $SUM");
+    assert_eq!(actual.out, "4");
 }

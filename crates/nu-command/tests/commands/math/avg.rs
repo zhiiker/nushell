@@ -16,10 +16,13 @@ fn can_average_numbers() {
 
 #[test]
 fn can_average_bytes() {
-    let actual = nu!(
-        cwd: "tests/fixtures/formats",
-        "ls | sort-by name | skip 1 | first 2 | get size | math avg | format \"{$it}\" "
-    );
+    let actual = nu!("[100kb, 10b, 100mib] | math avg | to json -r");
 
-    assert_eq!(actual.out, "1.6 KB");
+    assert_eq!(actual.out, "34985870");
+}
+
+#[test]
+fn const_avg() {
+    let actual = nu!("const AVG = [1 3 5] | math avg; $AVG");
+    assert_eq!(actual.out, "3");
 }

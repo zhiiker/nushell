@@ -7,7 +7,7 @@ fn returns_basename_of_empty_input() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo "" 
+            echo ""
             | path basename
         "#
     ));
@@ -20,8 +20,8 @@ fn replaces_basename_of_empty_input() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo "" 
-            | path basename -r newname.txt
+            echo ""
+            | path basename --replace newname.txt
         "#
     ));
 
@@ -33,8 +33,8 @@ fn returns_basename_of_path_ending_with_dot() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo "some/file.txt/." 
-            | path basename 
+            echo "some/file.txt/."
+            | path basename
         "#
     ));
 
@@ -46,8 +46,8 @@ fn replaces_basename_of_path_ending_with_dot() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo "some/file.txt/." 
-            | path basename -r viking.txt
+            echo "some/file.txt/."
+            | path basename --replace viking.txt
         "#
     ));
 
@@ -60,8 +60,8 @@ fn returns_basename_of_path_ending_with_double_dot() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo "some/file.txt/.." 
-            | path basename 
+            echo "some/file.txt/.."
+            | path basename
         "#
     ));
 
@@ -73,11 +73,17 @@ fn replaces_basename_of_path_ending_with_double_dot() {
     let actual = nu!(
         cwd: "tests", pipeline(
         r#"
-            echo "some/file.txt/.." 
-            | path basename -r eggs
+            echo "some/file.txt/.."
+            | path basename --replace eggs
         "#
     ));
 
     let expected = join_path_sep(&["some/file.txt/..", "eggs"]);
     assert_eq!(actual.out, expected);
+}
+
+#[test]
+fn const_path_basename() {
+    let actual = nu!("const name = ('spam/eggs.txt' | path basename); $name");
+    assert_eq!(actual.out, "eggs.txt");
 }

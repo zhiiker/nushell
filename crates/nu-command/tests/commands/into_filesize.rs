@@ -1,76 +1,130 @@
 use nu_test_support::{nu, pipeline};
 
 #[test]
-fn into_filesize_int() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        1 | into filesize
-        "#
-    ));
+fn int() {
+    let actual = nu!("1 | into filesize");
 
     assert!(actual.out.contains("1 B"));
 }
 
 #[test]
-fn into_filesize_decimal() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        1.2 | into filesize
-        "#
-    ));
+fn float() {
+    let actual = nu!("1.2 | into filesize");
 
     assert!(actual.out.contains("1 B"));
 }
 
 #[test]
-fn into_filesize_str() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        '2000' | into filesize
-        "#
-    ));
-
-    assert!(actual.out.contains("2.0 KB"));
+fn str() {
+    let actual = nu!("'2000' | into filesize");
+    assert!(actual.out.contains("2.0 kB"));
 }
 
 #[test]
-fn into_filesize_str_newline() {
-    let actual = nu!(
-        cwd: ".", pipeline(
+fn str_newline() {
+    let actual = nu!(pipeline(
         r#"
-        '2000
-' | into filesize
+        "2000
+" | into filesize
         "#
     ));
 
-    assert!(actual.out.contains("2.0 KB"));
+    assert!(actual.out.contains("2.0 kB"));
 }
 
 #[test]
-fn into_filesize_str_many_newlines() {
-    let actual = nu!(
-        cwd: ".", pipeline(
+fn str_many_newlines() {
+    let actual = nu!(pipeline(
         r#"
-        '2000
+        "2000
 
-' | into filesize
+" | into filesize
         "#
     ));
 
-    assert!(actual.out.contains("2.0 KB"));
+    assert!(actual.out.contains("2.0 kB"));
 }
 
 #[test]
-fn into_filesize_filesize() {
-    let actual = nu!(
-        cwd: ".", pipeline(
-        r#"
-        3kb | into filesize
-        "#
-    ));
+fn filesize() {
+    let actual = nu!("3kB | into filesize");
 
-    assert!(actual.out.contains("3.0 KB"));
+    assert!(actual.out.contains("3.0 kB"));
+}
+
+#[test]
+fn negative_filesize() {
+    let actual = nu!("-3kB | into filesize");
+
+    assert!(actual.out.contains("-3.0 kB"));
+}
+
+#[test]
+fn negative_str_filesize() {
+    let actual = nu!("'-3kB' | into filesize");
+
+    assert!(actual.out.contains("-3.0 kB"));
+}
+
+#[test]
+fn wrong_negative_str_filesize() {
+    let actual = nu!("'--3kB' | into filesize");
+
+    assert!(actual.err.contains("can't convert string to filesize"));
+}
+
+#[test]
+fn large_negative_str_filesize() {
+    let actual = nu!("'-10000PB' | into filesize");
+
+    assert!(actual.err.contains("can't convert string to filesize"));
+}
+
+#[test]
+fn negative_str() {
+    let actual = nu!("'-1' | into filesize");
+
+    assert!(actual.out.contains("-1 B"));
+}
+
+#[test]
+fn wrong_negative_str() {
+    let actual = nu!("'--1' | into filesize");
+
+    assert!(actual.err.contains("can't convert string to filesize"));
+}
+
+#[test]
+fn positive_str_filesize() {
+    let actual = nu!("'+1kB' | into filesize");
+
+    assert!(actual.out.contains("1.0 kB"));
+}
+
+#[test]
+fn wrong_positive_str_filesize() {
+    let actual = nu!("'++1kB' | into filesize");
+
+    assert!(actual.err.contains("can't convert string to filesize"));
+}
+
+#[test]
+fn large_positive_str_filesize() {
+    let actual = nu!("'+10000PB' | into filesize");
+
+    assert!(actual.err.contains("can't convert string to filesize"));
+}
+
+#[test]
+fn positive_str() {
+    let actual = nu!("'+1' | into filesize");
+
+    assert!(actual.out.contains("1 B"));
+}
+
+#[test]
+fn wrong_positive_str() {
+    let actual = nu!("'++1' | into filesize");
+
+    assert!(actual.err.contains("can't convert string to filesize"));
 }

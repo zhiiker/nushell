@@ -1,9 +1,9 @@
 use super::Director;
-use crate::fs;
-use crate::fs::Stub;
-use getset::Getters;
-use glob::glob;
-use std::path::{Path, PathBuf};
+use crate::fs::{self, Stub};
+use nu_glob::glob;
+#[cfg(not(target_arch = "wasm32"))]
+use nu_path::Path;
+use nu_path::{AbsolutePath, AbsolutePathBuf};
 use std::str;
 use tempfile::{tempdir, TempDir};
 
@@ -23,43 +23,46 @@ impl EnvironmentVariable {
 }
 
 pub struct Playground<'a> {
-    root: TempDir,
+    _root: TempDir,
     tests: String,
-    cwd: PathBuf,
-    config: PathBuf,
+    cwd: AbsolutePathBuf,
+    config: Option<AbsolutePathBuf>,
     environment_vars: Vec<EnvironmentVariable>,
     dirs: &'a Dirs,
 }
 
-#[derive(Default, Getters, Clone)]
-#[get = "pub"]
+#[derive(Clone)]
 pub struct Dirs {
-    pub root: PathBuf,
-    pub test: PathBuf,
-    pub fixtures: PathBuf,
+    pub root: AbsolutePathBuf,
+    pub test: AbsolutePathBuf,
+    pub fixtures: AbsolutePathBuf,
 }
 
 impl Dirs {
-    pub fn formats(&self) -> PathBuf {
+    pub fn formats(&self) -> AbsolutePathBuf {
         self.fixtures.join("formats")
     }
 
-    pub fn config_fixtures(&self) -> PathBuf {
-        self.fixtures.join("playground/config")
+    pub fn root(&self) -> &AbsolutePath {
+        &self.root
+    }
+
+    pub fn test(&self) -> &AbsolutePath {
+        &self.test
     }
 }
 
 impl<'a> Playground<'a> {
-    pub fn root(&self) -> &Path {
-        self.root.path()
+    pub fn root(&self) -> &AbsolutePath {
+        &self.dirs.root
     }
 
-    pub fn cwd(&self) -> &Path {
+    pub fn cwd(&self) -> &AbsolutePath {
         &self.cwd
     }
 
     pub fn back_to_playground(&mut self) -> &mut Self {
-        self.cwd = PathBuf::from(self.root()).join(self.tests.clone());
+        self.cwd = self.root().join(&self.tests);
         self
     }
 
@@ -68,64 +71,46 @@ impl<'a> Playground<'a> {
     }
 
     pub fn setup(topic: &str, block: impl FnOnce(Dirs, &mut Playground)) {
-        let root = tempdir().expect("Couldn't create a tempdir");
-        let nuplay_dir = root.path().join(topic);
+        let temp = tempdir().expect("Could not create a tempdir");
 
-        if PathBuf::from(&nuplay_dir).exists() {
-            std::fs::remove_dir_all(PathBuf::from(&nuplay_dir)).expect("can not remove directory");
+        let root = AbsolutePathBuf::try_from(temp.path())
+            .expect("Tempdir is not an absolute path")
+            .canonicalize()
+            .expect("Could not canonicalize tempdir");
+
+        let test = root.join(topic);
+        if test.exists() {
+            std::fs::remove_dir_all(&test).expect("Could not remove directory");
         }
+        std::fs::create_dir(&test).expect("Could not create directory");
+        let test = test
+            .canonicalize()
+            .expect("Could not canonicalize test path");
 
-        std::fs::create_dir(PathBuf::from(&nuplay_dir)).expect("can not create directory");
-
-        let fixtures = fs::fixtures();
-        let fixtures = nu_path::canonicalize(fixtures.clone()).unwrap_or_else(|e| {
-            panic!(
-                "Couldn't canonicalize fixtures path {}: {:?}",
-                fixtures.display(),
-                e
-            )
-        });
-
-        let mut playground = Playground {
-            root,
-            tests: topic.to_string(),
-            cwd: nuplay_dir,
-            config: fixtures.join("playground/config/default.toml"),
-            environment_vars: Vec::default(),
-            dirs: &Dirs::default(),
-        };
-
-        let playground_root = playground.root.path();
-
-        let test = nu_path::canonicalize(playground_root.join(topic)).unwrap_or_else(|e| {
-            panic!(
-                "Couldn't canonicalize test path {}: {:?}",
-                playground_root.join(topic).display(),
-                e
-            )
-        });
-
-        let root = nu_path::canonicalize(playground_root).unwrap_or_else(|e| {
-            panic!(
-                "Couldn't canonicalize tests root path {}: {:?}",
-                playground_root.display(),
-                e
-            )
-        });
+        let fixtures = fs::fixtures()
+            .canonicalize()
+            .expect("Could not canonicalize fixtures path");
 
         let dirs = Dirs {
-            root,
-            test,
-            fixtures,
+            root: root.into(),
+            test: test.as_path().into(),
+            fixtures: fixtures.into(),
         };
 
-        playground.dirs = &dirs;
+        let mut playground = Playground {
+            _root: temp,
+            tests: topic.to_string(),
+            cwd: test.into(),
+            config: None,
+            environment_vars: Vec::default(),
+            dirs: &dirs,
+        };
 
         block(dirs.clone(), &mut playground);
     }
 
-    pub fn with_config(&mut self, source_file: impl AsRef<Path>) -> &mut Self {
-        self.config = source_file.as_ref().to_path_buf();
+    pub fn with_config(&mut self, source_file: AbsolutePathBuf) -> &mut Self {
+        self.config = Some(source_file);
         self
     }
 
@@ -135,14 +120,16 @@ impl<'a> Playground<'a> {
         self
     }
 
-    pub fn get_config(&self) -> &str {
-        self.config.to_str().expect("could not convert path.")
+    pub fn get_config(&self) -> Option<&str> {
+        self.config
+            .as_ref()
+            .map(|cfg| cfg.to_str().expect("could not convert path."))
     }
 
     pub fn build(&mut self) -> Director {
         Director {
             cwd: Some(self.dirs.test().into()),
-            config: Some(self.config.clone().into()),
+            config: self.config.clone().map(|cfg| cfg.into()),
             environment_vars: self.environment_vars.clone(),
             ..Default::default()
         }
@@ -191,16 +178,16 @@ impl<'a> Playground<'a> {
         self
     }
 
-    pub fn with_files(&mut self, files: Vec<Stub>) -> &mut Self {
+    pub fn with_files(&mut self, files: &[Stub]) -> &mut Self {
         let endl = fs::line_ending();
 
         files
             .iter()
             .map(|f| {
-                let mut path = PathBuf::from(&self.cwd);
-
+                let mut permission_set = false;
+                let mut write_able = true;
                 let (file_name, contents) = match *f {
-                    Stub::EmptyFile(name) => (name, "fake data".to_string()),
+                    Stub::EmptyFile(name) => (name, String::new()),
                     Stub::FileWithContent(name, content) => (name, content.to_string()),
                     Stub::FileWithContentToBeTrimmed(name, content) => (
                         name,
@@ -211,11 +198,24 @@ impl<'a> Playground<'a> {
                             .collect::<Vec<&str>>()
                             .join(&endl),
                     ),
+                    Stub::FileWithPermission(name, is_write_able) => {
+                        permission_set = true;
+                        write_able = is_write_able;
+                        (name, "check permission".to_string())
+                    }
                 };
 
-                path.push(file_name);
+                let path = self.cwd.join(file_name);
 
-                std::fs::write(path, contents.as_bytes()).expect("can not create file");
+                std::fs::write(&path, contents.as_bytes()).expect("can not create file");
+                if permission_set {
+                    let err_perm = "can not set permission";
+                    let mut perm = std::fs::metadata(path.clone())
+                        .expect(err_perm)
+                        .permissions();
+                    perm.set_readonly(!write_able);
+                    std::fs::set_permissions(path, perm).expect(err_perm);
+                }
             })
             .for_each(drop);
         self.back_to_playground();
@@ -224,11 +224,13 @@ impl<'a> Playground<'a> {
 
     pub fn within(&mut self, directory: &str) -> &mut Self {
         self.cwd.push(directory);
-        std::fs::create_dir(&self.cwd).expect("can not create directory");
+        if !(self.cwd.exists() && self.cwd.is_dir()) {
+            std::fs::create_dir(&self.cwd).expect("can not create directory");
+        }
         self
     }
 
-    pub fn glob_vec(pattern: &str) -> Vec<PathBuf> {
+    pub fn glob_vec(pattern: &str) -> Vec<std::path::PathBuf> {
         let glob = glob(pattern);
 
         glob.expect("invalid pattern")

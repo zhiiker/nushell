@@ -7,11 +7,11 @@ fn lines() {
         r#"
             open cargo_sample.toml -r
             | lines
-            | skip while $it != "[dependencies]"
+            | skip while {|it| $it != "[dependencies]" }
             | skip 1
-            | first 1
+            | first
             | split column "="
-            | get Column1
+            | get column1.0
             | str trim
         "#
     ));
@@ -23,12 +23,12 @@ fn lines() {
 fn lines_proper_buffering() {
     let actual = nu!(
         cwd: "tests/fixtures/formats", pipeline(
-        r#"
+        "
             open lines_test.txt -r
             | lines
             | str length
-            | to json
-        "#
+            | to json -r
+        "
     ));
 
     assert_eq!(actual.out, "[8193,3]");
@@ -38,13 +38,34 @@ fn lines_proper_buffering() {
 fn lines_multi_value_split() {
     let actual = nu!(
         cwd: "tests/fixtures/formats", pipeline(
-        r#"
+        "
             open sample-simple.json
             | get first second
             | lines
             | length
+        "
+    ));
+
+    assert_eq!(actual.out, "6");
+}
+
+/// test whether this handles CRLF and LF in the same input
+#[test]
+fn lines_mixed_line_endings() {
+    let actual = nu!(
+        cwd: "tests/fixtures/formats", pipeline(
+        r#"
+            "foo\nbar\r\nquux" | lines | length
         "#
     ));
 
-    assert_eq!(actual.out, "5");
+    assert_eq!(actual.out, "3");
+}
+
+#[cfg(not(windows))]
+#[test]
+fn lines_on_error() {
+    let actual = nu!("open . | lines");
+
+    assert!(actual.err.contains("Is a directory"));
 }

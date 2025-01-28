@@ -1,5 +1,3 @@
-// #![no_std]
-
 //! A Rust library providing pretty hex dump.
 //!
 //! A `simple_hex()` way renders one-line hex dump, and a `pretty_hex()` way renders
@@ -8,7 +6,7 @@
 //!
 //! ## Example of `simple_hex()`
 //! ```
-//! use pretty_hex::*;
+//! use nu_pretty_hex::*;
 //!
 //! let v = vec![222, 173, 190, 239, 202, 254, 32, 24];
 //! # #[cfg(feature = "alloc")]
@@ -23,7 +21,7 @@
 //! ```
 //! ## Example of `pretty_hex()`
 //! ```
-//! use pretty_hex::*;
+//! use nu_pretty_hex::*;
 //!
 //! let v = &include_bytes!("../tests/data");
 //! # #[cfg(feature = "alloc")]
@@ -40,7 +38,7 @@
 //! ```
 //! ## Example of `config_hex()`
 //! ```
-//! use pretty_hex::*;
+//! use nu_pretty_hex::*;
 //!
 //! let cfg = HexConfig {title: false, width: 8, group: 0, ..HexConfig::default() };
 //!
@@ -58,9 +56,6 @@
 //! 0010:   89 d5 cf 90 23 67 4b 48   ....#gKH
 //! 0018:   db b1 bc 35 bf ee         ...5..
 //! ```
-
-#[cfg(feature = "alloc")]
-extern crate alloc;
 
 mod pretty_hex;
 pub use pretty_hex::*;
